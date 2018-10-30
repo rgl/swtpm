@@ -85,6 +85,15 @@ The hostname where tcsd is running on. The default hostname is 'localhost'.
 The TCP port on which tcsd is listening for messages. The default port is
 30003.
 
+=item B<--tpm2>
+
+The TPM to use for signing the certificates is a TPM 2 and Intel's TSS 2.0
+stack must be running (tpm2-abrmd) along with the TPM 2.0 PKCS11 module.
+The TPM 2.0 PKCS11 module must have been initialized using the tpm2_ptool.
+
+The environment variables SWTPM_PKCS11_PIN and SWTPM_PKCS11_SO_PIN should be set to hold
+the PINs. If they are not set the default PIN 'swtpm-tpmca' will be used.
+
 =item B<-help, -h, -?>
 
 Display the help screen and exit.
@@ -97,6 +106,9 @@ The following example creates an intermediate TPM CA and writes the keys
 into /var/lib/swtpm-localca and the swtpm-localca configuration to
 /etc/swtpm-localca.conf. It can then be used for signing certificates of
 newly created B<swtpm> TPMs.
+
+If the host's TPM is a TPM 1.2, we need to start the tcsd first and can
+then create the TPM key and TPM CA certificate:
 
  #> sudo systemctl start tcsd
  #> sudo /usr/share/swtpm/swtpm-create-tpmca \
@@ -115,10 +127,36 @@ newly created B<swtpm> TPMs.
  signingkey_password = password
  parentkey_password = password
 
+
+Alternatively, if the host's TPM is a TPM 2 and Intel's TPM 2 stack is
+installed, we need to start tpm2-abrmd first and can then create the TPM key
+and TPM CA certificate:
+
+ #> sudo systemctl start tpm2-abrmd
+ #> sudo SWTPM_PKCS11_PIN=mypin /usr/share/swtpm/swtpm-create-tpmca \
+		--dir /var/lib/swtpm-localca \
+		--overwrite \
+		--outfile /etc/swtpm-localca.conf \
+		--group tss \
+		--tpm2
+ statedir = /var/lib/swtpm-localca
+ signingkey = pkcs11:model=TPM2%20PKCS%2311\;manufacturer=Intel\;serial=0000000000000000\;token=swtpm-tpmca\;id=%31\;object=swtpm-tpmca-key\;type=private
+ issuercert = /var/lib/swtpm-localca/swtpm-localca-tpmca-cert.pem
+ certserial = /var/lib/swtpm-localca/certserial
+ SWTPM_PKCS11_PIN = mypin
+
+To test either one of the above TPM CAs, run the following command:
+
+ #> /usr/share/swtpm/swtpm-localca \
+	--type ek --ek x=11,y=13 \
+	--dir /tmp --vmid test --tpm2 \
+	--tpm-spec-family 2.0 --tpm-spec-revision 146 --tpm-spec-level 00 \
+	--tpm-model swtpm --tpm-version 20170101 --tpm-manufacturer IBM
+
 =head1 KNOWN ISSUES
 
 The interaction of GnuTLS certtool with the TPM TCSD daemon may cause so
-many TPM (key) authentication failures, that the TPM refuses to accept any
+many TPM (key) authentication failures that the TPM refuses to accept any
 more authenticated commands until the TPM's owner sends it the
 TPM_ORD_ResetLockValue command. The reason for this is that certtool first
 tries to use 20 zero bytes for the SRK password and only then prompts for
