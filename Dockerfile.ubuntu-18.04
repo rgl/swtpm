@@ -1,0 +1,20 @@
+# cp -r ../libtpms/build .
+# docker build -t build-swtpm-ubuntu-18.04 -f Dockerfile.ubuntu-18.04 .
+# docker run --rm build-swtpm-ubuntu-18.04 | tar --extract --verbose
+# docker rmi build-swtpm-ubuntu-18.04
+# find build -name '*.deb' | xargs -L1 -i% bash -c 'echo %; dpkg -c %'
+FROM ubuntu:18.04
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get -y update && \
+    apt-get -y install build-essential fakeroot devscripts equivs
+ADD . /build/src
+WORKDIR /build/src
+RUN dpkg -i /build/src/build/libtpms*.deb
+RUN mk-build-deps \
+    --install \
+    --build-dep \
+    '--tool=apt-get --no-install-recommends -y' \
+    debian/control
+RUN dpkg-buildpackage -b -us -uc -j4 && \
+    ls -l /build/*.deb
+ENTRYPOINT tar --create --to-stdout /build/*.deb
